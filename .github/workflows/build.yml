@@ -15,9 +15,11 @@ jobs:
           sudo apt-get install -y bc bison flex libssl-dev libelf-dev cpio curl git python3 gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
       - name: Get Proton Clang 13
         run: git clone --depth=1 https://github.com/kdrag0n/proton-clang $HOME/proton-clang
-      - name: Integrasi SukiSU Ultra
+      - name: Integrasi SukiSU Non-GKI
         run: |
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s nongki
+          curl -LSs https://raw.githubusercontent.com/xiziya/SukiSU_Non-GKI/builtin/kernel/setup.sh | sh
+          ls -l drivers/kernelsu
+          grep -n "kernelsu" drivers/Makefile drivers/Kconfig
       - name: Aktifkan KSU dan KPM
         run: |
           cat >> arch/arm64/configs/$DEFCONFIG << 'EOF'
@@ -34,6 +36,7 @@ jobs:
           ARGS="O=out ARCH=arm64 CC=$PC/clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- AR=$PC/llvm-ar NM=$PC/llvm-nm OBJCOPY=$PC/llvm-objcopy OBJDUMP=$PC/llvm-objdump STRIP=$PC/llvm-strip HOSTCC=gcc HOSTCXX=g++"
           make $ARGS $DEFCONFIG
           grep -E "CONFIG_KSU|CONFIG_KPM|KALLSYMS" out/.config
+          grep -q "CONFIG_KSU=y" out/.config || { echo "!!! KSU TIDAK AKTIF DI .config"; exit 1; }
           make -j$(nproc) $ARGS
       - name: Buat zip AnyKernel3
         run: |
