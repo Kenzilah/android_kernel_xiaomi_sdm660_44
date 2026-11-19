@@ -2,7 +2,7 @@ name: Build Kernel
 on: workflow_dispatch
 env:
   DEFCONFIG: whyred_defconfig
-  KBUILD_BUILD_USER: pei 
+  KBUILD_BUILD_USER: pei
   KBUILD_BUILD_HOST: Fnz_09
 jobs:
   build:
@@ -12,29 +12,33 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev libelf-dev gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi ccache
+          sudo apt-get install -y bc bison flex libssl-dev libelf-dev cpio curl git python3 gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
       - name: Get Proton Clang 13
         run: git clone --depth=1 https://github.com/kdrag0n/proton-clang $HOME/proton-clang
-      - name: Enable KALLSYMS
+      - name: Cek defconfig
+        run: ls arch/arm64/configs | grep -i whyred
+      - name: Integrasi SukiSU Ultra
         run: |
-          echo "CONFIG_KALLSYMS=y" >> arch/arm64/configs/$DEFCONFIG
-          echo "CONFIG_KALLSYMS_ALL=y" >> arch/arm64/configs/$DEFCONFIG
-      - name: Disable WireGuard fetch
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s nongki
+      - name: Aktifkan KSU dan KPM
         run: |
-          sed -i '/fetch-latest-wireguard.sh/d' scripts/Kbuild.include
-          sed -i '/net\/wireguard\/Kconfig/d' net/Kconfig
-          sed -i '/wireguard/d' net/Makefile
-          sed -i '/CONFIG_WIREGUARD/d' arch/arm64/configs/$DEFCONFIG
-      - name: RieLCantik
-        run: |
-          sed -i '/^CONFIG_LOCALVERSION=/d' arch/arm64/configs/$DEFCONFIG
-          echo 'CONFIG_LOCALVERSION="-RielCantik"' >> arch/arm64/configs/$DEFCONFIG
+          cat >> arch/arm64/configs/$DEFCONFIG << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KPM=y
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_KALLSYMS=y
+          CONFIG_KALLSYMS_ALL=y
+          CONFIG_OVERLAY_FS=y
+          EOF
       - name: Build
         run: |
           export PATH="$HOME/proton-clang/bin:$PATH"
-          make O=out ARCH=arm64 $DEFCONFIG
-          grep -E "KALLSYMS|LOCALVERSION" out/.config
-          make -j$(nproc) O=out ARCH=arm64 HOSTCC="gcc -fcommon" CC=clang AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          ARGS="O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTCC=gcc"
+          make $ARGS $DEFCONFIG
+          grep -E "CONFIG_KSU|CONFIG_KPM|KALLSYMS" out/.config
+          make -j$(nproc) $ARGS
       - uses: actions/upload-artifact@v4
         with:
           name: kernel
