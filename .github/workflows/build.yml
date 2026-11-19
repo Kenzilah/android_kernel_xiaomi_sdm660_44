@@ -35,7 +35,34 @@ jobs:
           make $ARGS $DEFCONFIG
           grep -E "CONFIG_KSU|CONFIG_KPM|KALLSYMS" out/.config
           make -j$(nproc) $ARGS
+      - name: Buat zip AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
+          rm -rf AnyKernel3/.git AnyKernel3/ramdisk AnyKernel3/modules AnyKernel3/patch
+          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          cat > AnyKernel3/anykernel.sh << 'EOF'
+          ### AnyKernel3 Ramdisk Mod Script
+          properties() { '
+          kernel.string=San-Kernel SukiSU Ultra KPM
+          do.devicecheck=0
+          do.modules=0
+          do.systemless=0
+          do.cleanup=1
+          do.cleanuponabort=0
+          device.name1=whyred
+          supported.versions=
+          supported.patchlevels=
+          supported.vendorpatchlevels=
+          '; }
+          BLOCK=/dev/block/bootdevice/by-name/boot;
+          IS_SLOT_DEVICE=0;
+          RAMDISK_COMPRESSION=auto;
+          PATCH_VBMETA_FLAG=auto;
+          . tools/ak3-core.sh;
+          split_boot;
+          flash_boot;
+          EOF
       - uses: actions/upload-artifact@v4
         with:
-          name: kernel
-          path: out/arch/arm64/boot/Image.gz-dtb
+          name: San-SukiSU-whyred-AnyKernel3
+          path: AnyKernel3/
