@@ -15,8 +15,6 @@ jobs:
           sudo apt-get install -y bc bison flex libssl-dev libelf-dev cpio curl git python3 gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
       - name: Get Proton Clang 13
         run: git clone --depth=1 https://github.com/kdrag0n/proton-clang $HOME/proton-clang
-      - name: Cek defconfig
-        run: ls arch/arm64/configs | grep -i whyred
       - name: Integrasi SukiSU Ultra
         run: |
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
@@ -28,12 +26,12 @@ jobs:
           CONFIG_KPM=y
           CONFIG_KALLSYMS=y
           CONFIG_KALLSYMS_ALL=y
-          CONFIG_OVERLAY_FS=y
           EOF
       - name: Build
         run: |
-          export PATH="$HOME/proton-clang/bin:$PATH"
-          ARGS="O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip HOSTCC=gcc"
+          PC=$HOME/proton-clang/bin
+          export PATH="$PATH:$PC"
+          ARGS="O=out ARCH=arm64 CC=$PC/clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- AR=$PC/llvm-ar NM=$PC/llvm-nm OBJCOPY=$PC/llvm-objcopy OBJDUMP=$PC/llvm-objdump STRIP=$PC/llvm-strip HOSTCC=gcc HOSTCXX=g++"
           make $ARGS $DEFCONFIG
           grep -E "CONFIG_KSU|CONFIG_KPM|KALLSYMS" out/.config
           make -j$(nproc) $ARGS
