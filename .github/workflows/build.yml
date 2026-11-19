@@ -20,9 +20,6 @@ jobs:
       - name: Integrasi SukiSU Ultra
         run: |
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
-          cd KernelSU
-          git fetch --unshallow || true
-          git checkout 28626e15
       - name: Aktifkan KSU dan KPM
         run: |
           cat >> arch/arm64/configs/$DEFCONFIG << 'EOF'
