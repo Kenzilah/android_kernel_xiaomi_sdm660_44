@@ -19,15 +19,16 @@ jobs:
         run: ls arch/arm64/configs | grep -i whyred
       - name: Integrasi SukiSU Ultra
         run: |
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s nongki
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
+          cd KernelSU
+          git fetch --unshallow || true
+          git checkout 28626e15
       - name: Aktifkan KSU dan KPM
         run: |
           cat >> arch/arm64/configs/$DEFCONFIG << 'EOF'
           CONFIG_KSU=y
+          CONFIG_KSU_MANUAL_HOOK=y
           CONFIG_KPM=y
-          CONFIG_KPROBES=y
-          CONFIG_HAVE_KPROBES=y
-          CONFIG_KPROBE_EVENTS=y
           CONFIG_KALLSYMS=y
           CONFIG_KALLSYMS_ALL=y
           CONFIG_OVERLAY_FS=y
