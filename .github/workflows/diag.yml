@@ -1,0 +1,24 @@
+name: Diagnosa KSU
+on: workflow_dispatch
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cek source sebelum integrasi
+        run: |
+          echo "=== 1. drivers/kernelsu sebelum setup ==="
+          ls -la drivers/kernelsu 2>&1 | head -20 || true
+          echo "=== 2. KSU di defconfig ==="
+          grep -n -i "ksu\|kprobes" arch/arm64/configs/whyred_defconfig || true
+          echo "=== 3. Hook di source kernel ==="
+          grep -rn "ksu_handle\|CONFIG_KSU" fs kernel security drivers/input include --include=*.c --include=*.h | head -60 || true
+      - name: Integrasi
+        run: |
+          curl -LSs https://raw.githubusercontent.com/xiziya/SukiSU_Non-GKI/builtin/kernel/setup.sh | sh
+      - name: Cek Kconfig driver
+        run: |
+          echo "=== 4. Kconfig driver ==="
+          grep -n -i "^config \|^choice\|depends on\|hook" drivers/kernelsu/Kconfig | head -80 || true
+          echo "=== 5. Fungsi hook yang disediakan driver ==="
+          grep -rn "ksu_handle" KernelSU/kernel --include=*.h | head -30 || true
