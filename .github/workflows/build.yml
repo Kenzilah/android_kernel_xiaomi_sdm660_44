@@ -28,7 +28,12 @@ jobs:
           #include <asm/cacheflush.h>
           #endif
           EOF
-          grep -n "set_memory" arch/arm64/include/asm/cacheflush.h
+      - name: Perbaiki access_ok untuk kernel 4.4
+        run: |
+          grep -rn "access_ok(" KernelSU/kernel | head -40
+          find KernelSU/kernel -name "*.c" -o -name "*.h" | xargs perl -pi -e 's/\baccess_ok\((?!VERIFY_)/access_ok(VERIFY_WRITE, /g unless /^\s*#\s*define/'
+          echo "=== sesudah diperbaiki ==="
+          grep -rn "access_ok(" KernelSU/kernel | head -40
       - name: Aktifkan KSU dan KPM tanpa SUSFS
         run: |
           cat >> arch/arm64/configs/$DEFCONFIG << 'EOF'
