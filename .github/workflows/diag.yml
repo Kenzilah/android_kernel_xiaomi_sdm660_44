@@ -1,24 +1,29 @@
-name: Diagnosa KSU
+name: Diagnosa Source
 on: workflow_dispatch
 jobs:
   diag:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Cek source sebelum integrasi
+        with:
+          ref: android-4.4-stable
+          fetch-depth: 1
+      - name: Laporan
         run: |
-          echo "=== 1. drivers/kernelsu sebelum setup ==="
-          ls -la drivers/kernelsu 2>&1 | head -20 || true
-          echo "=== 2. KSU di defconfig ==="
-          grep -n -i "ksu\|kprobes" arch/arm64/configs/whyred_defconfig || true
-          echo "=== 3. Hook di source kernel ==="
-          grep -rn "ksu_handle\|CONFIG_KSU" fs kernel security drivers/input include --include=*.c --include=*.h | head -60 || true
-      - name: Integrasi
-        run: |
-          curl -LSs https://raw.githubusercontent.com/xiziya/SukiSU_Non-GKI/builtin/kernel/setup.sh | sh
-      - name: Cek Kconfig driver
-        run: |
-          echo "=== 4. Kconfig driver ==="
-          grep -n -i "^config \|^choice\|depends on\|hook" drivers/kernelsu/Kconfig | head -80 || true
-          echo "=== 5. Fungsi hook yang disediakan driver ==="
-          grep -rn "ksu_handle" KernelSU/kernel --include=*.h | head -30 || true
+          {
+            echo '```'
+            echo "== kernelsu =="
+            ls -ld drivers/kernelsu 2>&1
+            ls drivers/kernelsu 2>&1 | head -30
+            cat .gitmodules 2>/dev/null | head
+            echo "== hooks =="
+            grep -rn "ksu_" fs kernel security drivers/input --include=*.c --include=*.h 2>/dev/null | head -40
+            echo "== set_memory =="
+            ls arch/arm64/include/asm/set_memory.h include/linux/set_memory.h 2>&1
+            echo "== Makefile/Kconfig =="
+            grep -n kernelsu drivers/Makefile drivers/Kconfig 2>&1
+            echo "== defconfig =="
+            grep -n "KSU\|KPM\|KALLSYMS\|KPROBES\|OVERLAY" arch/arm64/configs/whyred_defconfig
+            echo '```'
+          } > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
