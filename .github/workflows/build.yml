@@ -1,99 +1,170 @@
-name: Build Kernel
-on: workflow_dispatch
-env:
-  DEFCONFIG: whyred_defconfig
-  KBUILD_BUILD_USER: pei
-  KBUILD_BUILD_HOST: Fnz_09
+name: San Kernel 4.4 + SukiSU Ultra (whyred)
+
+on:
+  workflow_dispatch:
+    inputs:
+      defconfig:
+        description: "defconfig"
+        default: "whyred_defconfig"
+      ksu_ref:
+        description: "Commit/branch SukiSU Ultra (default: sebelum 68d04cb, commit terakhir yang masih bisa dipakai kernel 4.x)"
+        default: "68d04cb~1"
+      kpm:
+        description: "Aktifkan KPM"
+        type: boolean
+        default: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install deps
+        with:
+          fetch-depth: 1
+
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev libelf-dev cpio curl git python3 gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
-      - name: Get Proton Clang 13
-        run: git clone --depth=1 https://github.com/kdrag0n/proton-clang $HOME/proton-clang
-      - name: Integrasi SukiSU Non-GKI
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libssl-dev libelf-dev cpio zip python3 patch curl git \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+
+      - name: Toolchain (Neutron clang)
         run: |
-          curl -LSs https://raw.githubusercontent.com/xiziya/SukiSU_Non-GKI/builtin/kernel/setup.sh | sh
-          ls -l drivers/kernelsu
-          grep -n "kernelsu" drivers/Makefile drivers/Kconfig
-      - name: Backport set_memory.h untuk KPM
+          mkdir -p "$HOME/neutron" && cd "$HOME/neutron"
+          bash <(curl -s https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman) -S
+          echo "$HOME/neutron/bin" >> "$GITHUB_PATH"
+          "$HOME/neutron/bin/clang" --version | head -1
+
+      - name: Integrasi SukiSU Ultra
+        env:
+          KSU_REF: ${{ inputs.ksu_ref }}
         run: |
-          cat > include/linux/set_memory.h << 'EOF'
-          #ifndef _LINUX_SET_MEMORY_H_
-          #define _LINUX_SET_MEMORY_H_
-          #include <asm/cacheflush.h>
-          #endif
-          EOF
-      - name: Perbaiki access_ok untuk kernel 4.4
+          set -e
+          git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra KernelSU
+          git -C KernelSU checkout "$KSU_REF"
+          git -C KernelSU log -1 --oneline
+
+          ln -sfn ../KernelSU/kernel drivers/kernelsu
+          grep -q kernelsu drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+          grep -q kernelsu drivers/Kconfig  || sed -i '$i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+
+      - name: Pasang hook syscall (kernel 4.4)
         run: |
-          find KernelSU/kernel -name "*.c" -o -name "*.h" | xargs perl -pi -e 's/\baccess_ok\((?!VERIFY_)/access_ok(VERIFY_WRITE, /g unless /^\s*#\s*define/'
-          grep -rn "access_ok(" KernelSU/kernel | head -20
-      - name: Perbaiki super_access KPM untuk kernel 4.4
+          curl -fsSL -o ksu_4.4.patch https://github.com/tiann/KernelSU/files/15158281/ksu_4.4.patch || true
+          if [ -s ksu_4.4.patch ]; then
+            patch -p1 --forward --no-backup-if-mismatch < ksu_4.4.patch || echo "::warning::sebagian hunk hook gagal/sudah terpasang"
+            find . -name '*.rej' -print
+          else
+            echo "::warning::patch hook tidak terunduh"
+          fi
+
+          # hook sys_reboot (dipakai SukiSU untuk komunikasi manager), hanya jika dibutuhkan
+          if grep -rq ksu_handle_sys_reboot KernelSU/kernel && ! grep -q ksu_handle_sys_reboot kernel/reboot.c; then
+          python3 - <<'PY'
+          p = 'kernel/reboot.c'
+          s = open(p).read()
+          d = s.index('SYSCALL_DEFINE4(reboot')
+          decl = '#ifdef CONFIG_KSU\nextern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);\n#endif\n\n'
+          s = s[:d] + decl + s[d:]
+          j = s.index('int ret = 0;', s.index('SYSCALL_DEFINE4(reboot')) + len('int ret = 0;')
+          s = s[:j] + '\n\n#ifdef CONFIG_KSU\n\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n#endif' + s[j:]
+          open(p, 'w').write(s)
+          PY
+          fi
+
+          echo "=== Laporan hook (OK = terpanggil di source kernel) ==="
+          for s in $(grep -rhoE '\bksu_handle_[a-z_0-9]+' KernelSU/kernel | sort -u); do
+            if grep -rqE "\b$s\b" fs kernel security drivers/input 2>/dev/null; then echo "OK      $s"; else echo "MISSING $s"; fi
+          done
+
+      - name: Config
+        env:
+          DEFCONFIG: ${{ inputs.defconfig }}
+          KPM: ${{ inputs.kpm }}
         run: |
-          F=KernelSU/kernel/kpm/super_access.c
-          echo "=== SEBELUM ==="
-          sed -n '150,175p' $F
-          sed -i '/DEFINE_MEMBER(task_struct, security)/d' $F
-          echo "=== SESUDAH ==="
-          sed -n '150,175p' $F
-      - name: Aktifkan KSU dan KPM tanpa SUSFS
-        run: |
-          cat >> arch/arm64/configs/$DEFCONFIG << 'EOF'
-          CONFIG_KSU=y
-          CONFIG_KSU_MANUAL_HOOK=y
-          # CONFIG_KSU_SUSFS is not set
-          CONFIG_KPM=y
-          CONFIG_KALLSYMS=y
-          CONFIG_KALLSYMS_ALL=y
-          EOF
+          set -e
+          DEF="arch/arm64/configs/$DEFCONFIG"
+          printf '%s\n' CONFIG_KSU=y CONFIG_KALLSYMS=y CONFIG_KALLSYMS_ALL=y CONFIG_OVERLAY_FS=y \
+            'CONFIG_LOCALVERSION="-San-SukiSU"' >> "$DEF"
+          if [ "$KPM" = "true" ]; then echo CONFIG_KPM=y >> "$DEF"; fi
+
+          make O=out ARCH=arm64 "$DEFCONFIG"
+          make O=out ARCH=arm64 olddefconfig
+          grep -E '^CONFIG_(KSU|KPM)=' out/.config || {
+            echo "::error::CONFIG_KSU tidak aktif, ada dependency Kconfig yang belum terpenuhi"
+            sed -n '1,60p' KernelSU/kernel/Kconfig
+            exit 1
+          }
+
       - name: Build
         run: |
-          PC=$HOME/proton-clang/bin
-          export PATH="$PATH:$PC"
-          ARGS="O=out ARCH=arm64 CC=$PC/clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- AR=$PC/llvm-ar NM=$PC/llvm-nm OBJCOPY=$PC/llvm-objcopy OBJDUMP=$PC/llvm-objdump STRIP=$PC/llvm-strip HOSTCC=gcc HOSTCXX=g++"
-          make $ARGS $DEFCONFIG
-          echo "=== CONFIG KSU di .config ==="
-          grep -E "CONFIG_KSU|CONFIG_KPM|KALLSYMS" out/.config
-          echo "=== Opsi HOOK di Kconfig ==="
-          grep -n -i "hook" drivers/kernelsu/Kconfig | head -40
-          grep -q "CONFIG_KSU=y" out/.config || { echo "!!! KSU TIDAK AKTIF"; exit 1; }
-          if grep -q "CONFIG_KSU_SUSFS=y" out/.config; then
-            echo "!!! SUSFS MASIH AKTIF"
-            exit 1
-          fi
-          make -j$(nproc) $ARGS
-      - name: Buat zip AnyKernel3
+          export KBUILD_BUILD_USER=Kenzilah KBUILD_BUILD_HOST=github-actions
+          ARGS=(O=out ARCH=arm64 CC=clang
+                CLANG_TRIPLE=aarch64-linux-gnu-
+                CROSS_COMPILE=aarch64-linux-gnu-
+                CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+                AR=llvm-ar NM=llvm-nm STRIP=llvm-strip
+                OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf
+                KCFLAGS=-Wno-error)
+          make -j"$(nproc)" "${ARGS[@]}" Image.gz-dtb 2>&1 | tee build.log || \
+          make -j"$(nproc)" "${ARGS[@]}" Image.gz 2>&1 | tee -a build.log
+          ls -lh out/arch/arm64/boot/ | grep -E 'Image'
+
+      - name: Package (AnyKernel3)
         run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
-          rm -rf AnyKernel3/.git AnyKernel3/ramdisk AnyKernel3/modules AnyKernel3/patch
-          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
-          cat > AnyKernel3/anykernel.sh << 'EOF'
-          ### AnyKernel3 Ramdisk Mod Script
+          set -e
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
+          cd ak3
+          rm -rf .git* README.md
+          IMG=../out/arch/arm64/boot/Image.gz-dtb
+          [ -f "$IMG" ] || IMG=../out/arch/arm64/boot/Image.gz
+          cp "$IMG" ./
+
+          cat > anykernel.sh <<'EOF'
+          ### AnyKernel3 minimal (kernel-only, tanpa ubah ramdisk)
           properties() { '
-          kernel.string=San-Kernel SukiSU Ultra KPM
-          do.devicecheck=0
+          kernel.string=San Kernel 4.4 + SukiSU Ultra
+          do.devicecheck=1
           do.modules=0
           do.systemless=0
           do.cleanup=1
           do.cleanuponabort=0
           device.name1=whyred
+          device.name2=
           supported.versions=
           supported.patchlevels=
           supported.vendorpatchlevels=
           '; }
-          BLOCK=/dev/block/bootdevice/by-name/boot;
+
+          BLOCK=auto;
           IS_SLOT_DEVICE=0;
           RAMDISK_COMPRESSION=auto;
           PATCH_VBMETA_FLAG=auto;
+
           . tools/ak3-core.sh;
-          split_boot;
-          flash_boot;
+
+          dump_boot;
+          write_boot;
           EOF
+
+          ZIP="San-4.4-SukiSU-whyred-$(date +%Y%m%d-%H%M).zip"
+          zip -r9 "../$ZIP" . -x '.git*'
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: San-SukiSU-whyred-AnyKernel3
-          path: AnyKernel3/
+          name: ${{ env.ZIP }}
+          path: ${{ env.ZIP }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
