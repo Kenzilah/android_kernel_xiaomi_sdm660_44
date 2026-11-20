@@ -10,20 +10,19 @@ jobs:
           fetch-depth: 1
       - name: Laporan
         run: |
-          {
-            echo '```'
-            echo "== kernelsu =="
-            ls -ld drivers/kernelsu 2>&1
-            ls drivers/kernelsu 2>&1 | head -30
-            cat .gitmodules 2>/dev/null | head
-            echo "== hooks =="
-            grep -rn "ksu_" fs kernel security drivers/input --include=*.c --include=*.h 2>/dev/null | head -40
-            echo "== set_memory =="
-            ls arch/arm64/include/asm/set_memory.h include/linux/set_memory.h 2>&1
-            echo "== Makefile/Kconfig =="
-            grep -n kernelsu drivers/Makefile drivers/Kconfig 2>&1
-            echo "== defconfig =="
-            grep -n "KSU\|KPM\|KALLSYMS\|KPROBES\|OVERLAY" arch/arm64/configs/whyred_defconfig
-            echo '```'
-          } > report.md
-          cat report.md >> "$GITHUB_STEP_SUMMARY"
+          set +e
+          echo "== kernelsu =="
+          ls -ld drivers/kernelsu 2>&1
+          ls drivers/kernelsu 2>&1 | head -30
+          cat .gitmodules 2>&1 | head
+          echo "== hooks =="
+          grep -rn "ksu_" fs kernel security drivers/input --include=*.c --include=*.h 2>&1 | head -40
+          echo "== set_memory =="
+          ls arch/arm64/include/asm/set_memory.h 2>&1
+          ls include/linux/set_memory.h 2>&1
+          echo "== Makefile/Kconfig =="
+          grep -n kernelsu drivers/Makefile drivers/Kconfig 2>&1
+          echo "== defconfig =="
+          grep -n "KSU\|KPM\|KALLSYMS\|KPROBES\|OVERLAY" arch/arm64/configs/whyred_defconfig 2>&1
+          echo "== selesai =="
+          exit 0
