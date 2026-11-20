@@ -20,11 +20,12 @@ jobs:
           curl -LSs https://raw.githubusercontent.com/xiziya/SukiSU_Non-GKI/builtin/kernel/setup.sh | sh
           ls -l drivers/kernelsu
           grep -n "kernelsu" drivers/Makefile drivers/Kconfig
-      - name: Aktifkan KSU dan KPM
+      - name: Aktifkan KSU dan KPM tanpa SUSFS
         run: |
           cat >> arch/arm64/configs/$DEFCONFIG << 'EOF'
           CONFIG_KSU=y
           CONFIG_KSU_MANUAL_HOOK=y
+          # CONFIG_KSU_SUSFS is not set
           CONFIG_KPM=y
           CONFIG_KALLSYMS=y
           CONFIG_KALLSYMS_ALL=y
@@ -36,7 +37,12 @@ jobs:
           ARGS="O=out ARCH=arm64 CC=$PC/clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- AR=$PC/llvm-ar NM=$PC/llvm-nm OBJCOPY=$PC/llvm-objcopy OBJDUMP=$PC/llvm-objdump STRIP=$PC/llvm-strip HOSTCC=gcc HOSTCXX=g++"
           make $ARGS $DEFCONFIG
           grep -E "CONFIG_KSU|CONFIG_KPM|KALLSYMS" out/.config
-          grep -q "CONFIG_KSU=y" out/.config || { echo "!!! KSU TIDAK AKTIF DI .config"; exit 1; }
+          grep -q "CONFIG_KSU=y" out/.config || { echo "!!! KSU TIDAK AKTIF"; exit 1; }
+          if grep -q "CONFIG_KSU_SUSFS=y" out/.config; then
+            echo "!!! SUSFS MASIH AKTIF"
+            grep -n -E "^config |^choice|default|depends on|prompt" drivers/kernelsu/Kconfig | head -120
+            exit 1
+          fi
           make -j$(nproc) $ARGS
       - name: Buat zip AnyKernel3
         run: |
