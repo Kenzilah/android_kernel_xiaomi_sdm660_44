@@ -36,8 +36,12 @@ jobs:
 
       - name: Toolchain (Neutron clang)
         run: |
+          sudo apt-get install -y patchelf
           mkdir -p "$HOME/neutron" && cd "$HOME/neutron"
-          bash <(curl -s https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman) -S
+          curl -fsSL -o antman https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman
+          chmod +x antman
+          ./antman -S
+          ./antman --patch=glibc
           echo "$HOME/neutron/bin" >> "$GITHUB_PATH"
           "$HOME/neutron/bin/clang" --version | head -1
 
