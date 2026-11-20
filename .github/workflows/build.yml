@@ -20,6 +20,15 @@ jobs:
           curl -LSs https://raw.githubusercontent.com/xiziya/SukiSU_Non-GKI/builtin/kernel/setup.sh | sh
           ls -l drivers/kernelsu
           grep -n "kernelsu" drivers/Makefile drivers/Kconfig
+      - name: Backport set_memory.h untuk KPM
+        run: |
+          cat > include/linux/set_memory.h << 'EOF'
+          #ifndef _LINUX_SET_MEMORY_H_
+          #define _LINUX_SET_MEMORY_H_
+          #include <asm/cacheflush.h>
+          #endif
+          EOF
+          grep -n "set_memory" arch/arm64/include/asm/cacheflush.h
       - name: Aktifkan KSU dan KPM tanpa SUSFS
         run: |
           cat >> arch/arm64/configs/$DEFCONFIG << 'EOF'
@@ -36,11 +45,13 @@ jobs:
           export PATH="$PATH:$PC"
           ARGS="O=out ARCH=arm64 CC=$PC/clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- AR=$PC/llvm-ar NM=$PC/llvm-nm OBJCOPY=$PC/llvm-objcopy OBJDUMP=$PC/llvm-objdump STRIP=$PC/llvm-strip HOSTCC=gcc HOSTCXX=g++"
           make $ARGS $DEFCONFIG
+          echo "=== CONFIG KSU di .config ==="
           grep -E "CONFIG_KSU|CONFIG_KPM|KALLSYMS" out/.config
+          echo "=== Opsi HOOK di Kconfig ==="
+          grep -n -i "hook" drivers/kernelsu/Kconfig | head -40
           grep -q "CONFIG_KSU=y" out/.config || { echo "!!! KSU TIDAK AKTIF"; exit 1; }
           if grep -q "CONFIG_KSU_SUSFS=y" out/.config; then
             echo "!!! SUSFS MASIH AKTIF"
-            grep -n -E "^config |^choice|default|depends on|prompt" drivers/kernelsu/Kconfig | head -120
             exit 1
           fi
           make -j$(nproc) $ARGS
