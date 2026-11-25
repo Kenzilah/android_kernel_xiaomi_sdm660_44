@@ -1,174 +1,47 @@
-name: San Kernel 4.4 + SukiSU Ultra (whyred)
+name: Build Whyred Kernel + OC
 
 on:
   workflow_dispatch:
-    inputs:
-      defconfig:
-        description: "defconfig"
-        default: "whyred_defconfig"
-      ksu_ref:
-        description: "Commit/branch SukiSU Ultra (default: sebelum 68d04cb, commit terakhir yang masih bisa dipakai kernel 4.x)"
-        default: "68d04cb~1"
-      kpm:
-        description: "Aktifkan KPM"
-        type: boolean
-        default: true
-
-defaults:
-  run:
-    shell: bash
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # --- BAGIAN BUAT NAMBAHIN OC ---
+      - name: Patch Overclock (OC)
+        run: |
+          # Ini bakal ngubah tabel frekuensi CPU di source code lu
+          # (Ganti path di bawah ini sesuai file DTS/DTSI di repo lu)
+          
+          # 1. Bikin backup file aslinya
+          cp arch/arm64/boot/dts/qcom/sdm660-whyred.dtsi arch/arm64/boot/dts/qcom/sdm660-whyred.dtsi.bak
+          
+          # 2. Nambahin frekuensi CPU (Contoh: naikin batas atas ke 2.2GHz)
+          # (Pakai 'sed' buat nyari frekuensi lama dan ganti ke baru)
+          sed -i 's/opp-hz = \/bits\/ 64 <1804800000>;/opp-hz = \/bits\/ 64 <2208000000>;/g' arch/arm64/boot/dts/qcom/sdm660-whyred.dtsi
+          
+          # 3. Nambahin frekuensi GPU (Contoh: naikin ke 585MHz)
+          # (Catatan: path file GPU biasanya beda, ini cuma contoh)
+          # sed -i 's/opp-hz = \/bits\/ 64 <430000000>;/opp-hz = \/bits\/ 64 <585000000>;/g' arch/arm64/boot/dts/qcom/sdm660-gpu.dtsi
+          
+          echo "Patch OC selesai!"
+      # -------------------------------
+
+      - name: Build Kernel
+        uses: dabao1955/kernel_build_action@v1
         with:
-          fetch-depth: 1
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            bc bison flex libssl-dev libelf-dev cpio zip python3 patch curl git \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
-            binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
-
-      - name: Toolchain (Neutron clang)
-        run: |
-          sudo apt-get install -y patchelf
-          mkdir -p "$HOME/neutron" && cd "$HOME/neutron"
-          curl -fsSL -o antman https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman
-          chmod +x antman
-          ./antman -S
-          ./antman --patch=glibc
-          echo "$HOME/neutron/bin" >> "$GITHUB_PATH"
-          "$HOME/neutron/bin/clang" --version | head -1
-
-      - name: Integrasi SukiSU Ultra
-        env:
-          KSU_REF: ${{ inputs.ksu_ref }}
-        run: |
-          set -e
-          git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra KernelSU
-          git -C KernelSU checkout "$KSU_REF"
-          git -C KernelSU log -1 --oneline
-
-          ln -sfn ../KernelSU/kernel drivers/kernelsu
-          grep -q kernelsu drivers/Makefile || echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
-          grep -q kernelsu drivers/Kconfig  || sed -i '$i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
-
-      - name: Pasang hook syscall (kernel 4.4)
-        run: |
-          curl -fsSL -o ksu_4.4.patch https://github.com/tiann/KernelSU/files/15158281/ksu_4.4.patch || true
-          if [ -s ksu_4.4.patch ]; then
-            patch -p1 --forward --no-backup-if-mismatch < ksu_4.4.patch || echo "::warning::sebagian hunk hook gagal/sudah terpasang"
-            find . -name '*.rej' -print
-          else
-            echo "::warning::patch hook tidak terunduh"
-          fi
-
-          # hook sys_reboot (dipakai SukiSU untuk komunikasi manager), hanya jika dibutuhkan
-          if grep -rq ksu_handle_sys_reboot KernelSU/kernel && ! grep -q ksu_handle_sys_reboot kernel/reboot.c; then
-          python3 - <<'PY'
-          p = 'kernel/reboot.c'
-          s = open(p).read()
-          d = s.index('SYSCALL_DEFINE4(reboot')
-          decl = '#ifdef CONFIG_KSU\nextern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);\n#endif\n\n'
-          s = s[:d] + decl + s[d:]
-          j = s.index('int ret = 0;', s.index('SYSCALL_DEFINE4(reboot')) + len('int ret = 0;')
-          s = s[:j] + '\n\n#ifdef CONFIG_KSU\n\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n#endif' + s[j:]
-          open(p, 'w').write(s)
-          PY
-          fi
-
-          echo "=== Laporan hook (OK = terpanggil di source kernel) ==="
-          for s in $(grep -rhoE '\bksu_handle_[a-z_0-9]+' KernelSU/kernel | sort -u); do
-            if grep -rqE "\b$s\b" fs kernel security drivers/input 2>/dev/null; then echo "OK      $s"; else echo "MISSING $s"; fi
-          done
-
-      - name: Config
-        env:
-          DEFCONFIG: ${{ inputs.defconfig }}
-          KPM: ${{ inputs.kpm }}
-        run: |
-          set -e
-          DEF="arch/arm64/configs/$DEFCONFIG"
-          printf '%s\n' CONFIG_KSU=y CONFIG_KALLSYMS=y CONFIG_KALLSYMS_ALL=y CONFIG_OVERLAY_FS=y \
-            'CONFIG_LOCALVERSION="-San-SukiSU"' >> "$DEF"
-          if [ "$KPM" = "true" ]; then echo CONFIG_KPM=y >> "$DEF"; fi
-
-          make O=out ARCH=arm64 "$DEFCONFIG"
-          make O=out ARCH=arm64 olddefconfig
-          grep -E '^CONFIG_(KSU|KPM)=' out/.config || {
-            echo "::error::CONFIG_KSU tidak aktif, ada dependency Kconfig yang belum terpenuhi"
-            sed -n '1,60p' KernelSU/kernel/Kconfig
-            exit 1
-          }
-
-      - name: Build
-        run: |
-          export KBUILD_BUILD_USER=Kenzilah KBUILD_BUILD_HOST=github-actions
-          ARGS=(O=out ARCH=arm64 CC=clang
-                CLANG_TRIPLE=aarch64-linux-gnu-
-                CROSS_COMPILE=aarch64-linux-gnu-
-                CROSS_COMPILE_ARM32=arm-linux-gnueabi-
-                AR=llvm-ar NM=llvm-nm STRIP=llvm-strip
-                OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump READELF=llvm-readelf
-                KCFLAGS=-Wno-error)
-          make -j"$(nproc)" "${ARGS[@]}" Image.gz-dtb 2>&1 | tee build.log || \
-          make -j"$(nproc)" "${ARGS[@]}" Image.gz 2>&1 | tee -a build.log
-          ls -lh out/arch/arm64/boot/ | grep -E 'Image'
-
-      - name: Package (AnyKernel3)
-        run: |
-          set -e
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
-          cd ak3
-          rm -rf .git* README.md
-          IMG=../out/arch/arm64/boot/Image.gz-dtb
-          [ -f "$IMG" ] || IMG=../out/arch/arm64/boot/Image.gz
-          cp "$IMG" ./
-
-          cat > anykernel.sh <<'EOF'
-          ### AnyKernel3 minimal (kernel-only, tanpa ubah ramdisk)
-          properties() { '
-          kernel.string=San Kernel 4.4 + SukiSU Ultra
-          do.devicecheck=1
-          do.modules=0
-          do.systemless=0
-          do.cleanup=1
-          do.cleanuponabort=0
-          device.name1=whyred
-          device.name2=
-          supported.versions=
-          supported.patchlevels=
-          supported.vendorpatchlevels=
-          '; }
-
-          BLOCK=auto;
-          IS_SLOT_DEVICE=0;
-          RAMDISK_COMPRESSION=auto;
-          PATCH_VBMETA_FLAG=auto;
-
-          . tools/ak3-core.sh;
-
-          dump_boot;
-          write_boot;
-          EOF
-
-          ZIP="San-4.4-SukiSU-whyred-$(date +%Y%m%d-%H%M).zip"
-          zip -r9 "../$ZIP" . -x '.git*'
-          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ZIP }}
-          path: ${{ env.ZIP }}
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: build-log
-          path: build.log
-          if-no-files-found: ignore
+          kernel-url: https://github.com/Kenzilah/android_kernel_xiaomi_sdm660_44
+          kernel-branch: android-4.4-stable
+          config: whyred_defconfig
+          arch: arm64
+          android-version: 12
+          aosp-clang: true
+          aosp-gcc: true
+          ksu: true
+          anykernel3: true
+          release: true
+          access-token: ${{ secrets.GITHUB_TOKEN }}
