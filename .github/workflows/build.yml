@@ -1,4 +1,4 @@
-name: Build Whyred Kernel with SukiSU Nova
+name: Build Whyred Kernel with SukiSU v4.1 (Manual Hook)
 
 on:
   workflow_dispatch:
@@ -12,31 +12,36 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup SukiSU Nova (Force Patch)
+      - name: Setup SukiSU v4.1 (Manual Hook)
         run: |
-          # 1. Clone manual pakai --depth=1 biar cepet (nggak hang)
-          git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
+          # 1. Clone driver SukiSU dari branch 'builtin' (untuk manual hook)
+          git clone --depth=1 --branch builtin https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
           
-          # 2. Jalankan setup.sh bawaan SukiSU (dia bakal otomatis patch syscall kernel)
-          # Kita pake flag 'builtin' biar dia naruh driver di drivers/kernelsu
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
-          
-          # 3. Hapus sisa folder clone manual biar bersih
+          # 2. Pindahkan driver ke folder kernel
+          mkdir -p drivers/kernelsu
+          cp -r KernelSU/kernel/* drivers/kernelsu/
           rm -rf KernelSU
+          
+          # 3. Patch manual hook ke file inti kernel
+          # Patch untuk fs/exec.c
+          sed -i '/#include <linux\/sched.h>/a #ifdef CONFIG_KSU\n#include <linux\/ksu.h>\n#endif' fs/exec.c
+          sed -i '/int do_execveat_common/i #ifdef CONFIG_KSU\n    ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);\n#endif' fs/exec.c
+          
+          # Patch untuk fs/open.c
+          sed -i '/#include <linux\/sched.h>/a #ifdef CONFIG_KSU\n#include <linux\/ksu.h>\n#endif' fs/open.c
+          sed -i '/SYSCALL_DEFINE3(faccessat/i #ifdef CONFIG_KSU\n    ksu_handle_faccessat(&dfd, &filename, &mode, NULL);\n#endif' fs/open.c
           
           # 4. Fix error static_call (Kernel 4.4 gak punya ini)
           find drivers/kernelsu/ -type f \( -name "*.h" -o -name "*.c" \) | xargs sed -i '/#include <linux\/static_call.h>/d'
           find drivers/kernelsu/ -type f \( -name "*.h" -o -name "*.c" \) | xargs sed -i '/#include <linux\/static_call_types.h>/d'
           sed -i '1i #define static_call(name) name\n#define static_call_update(name, func) do { } while (0)\n#define static_call_cond(name) name' $(find drivers/kernelsu -type f -name "*.c" | head -n 1)
           
-          # 5. Fix error KPM (access_ok & set_memory.h)
-          find drivers/kernelsu -type f -name "kpm.c" | xargs sed -i 's/if (access_ok(u64_to_user_ptr(cmd.result_code), sizeof(result)))/if (access_ok(VERIFY_WRITE, u64_to_user_ptr(cmd.result_code), sizeof(result)))/g'
-          find drivers/kernelsu -type f -name "compact.c" | xargs sed -i 's|#include <linux\/set_memory.h>|// #include <linux\/set_memory.h>|g'
-          
-          # 6. Matikan SUSFS biar gak ribet
-          echo "# CONFIG_KSU_SUSFS is not set" >> arch/arm64/configs/whyred_defconfig
+          # 5. Aktifkan KSU di defconfig
+          echo "CONFIG_KSU=y" >> arch/arm64/configs/whyred_defconfig
+          echo "CONFIG_KALLSYMS=y" >> arch/arm64/configs/whyred_defconfig
+          echo "CONFIG_KALLSYMS_ALL=y" >> arch/arm64/configs/whyred_defconfig
 
-          echo "Patching SukiSU Nova Selesai!"
+          echo "Patching SukiSU v4.1 (Manual Hook) Selesai!"
 
       - name: Install Dependencies
         run: |
@@ -57,5 +62,5 @@ jobs:
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-Image-Whyred-SukiSU-Nova
+          name: Kernel-Image-Whyred-SukiSU-v4.1
           path: out/arch/arm64/boot/Image.gz-dtb
