@@ -14,17 +14,17 @@ jobs:
 
       - name: Setup SukiSU (Manual Hook + Patch static_call)
         run: |
-          # 1. Unduh dan suntik SukiSU
+          # 1. Unduh SukiSU
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
           
-          # 2. HAPUS include static_call.h (karena kernel 4.4 tidak punya)
-          sed -i '/#include <linux\/static_call.h>/d' drivers/kernelsu/ksu_main.c
+          # 2. HAPUS semua include static_call.h di seluruh folder kernelsu
+          find drivers/kernelsu/ -type f -name "*.h" -o -name "*.c" | xargs sed -i '/#include <linux\/static_call.h>/d'
+          find drivers/kernelsu/ -type f -name "*.h" -o -name "*.c" | xargs sed -i '/#include <linux\/static_call_types.h>/d'
           
-          # 3. Tambahkan definisi tiruan (dummy macro) agar SukiSU tidak error
-          # Taruh di paling atas file ksu_main.c
-          sed -i '1i #define static_call(name) name\n#define static_call_update(name, func) do { } while (0)' drivers/kernelsu/ksu_main.c
+          # 3. Tambahkan definisi tiruan (dummy macro) di file kernel_includes.h
+          sed -i '1i #define static_call(name) name\n#define static_call_update(name, func) do { } while (0)\n#define static_call_mod(name) name' drivers/kernelsu/kernel_includes.h
           
-          echo "Patch static_call selesai!"
+          echo "Patch static_call di kernel_includes.h selesai!"
 
       - name: Install Dependencies
         run: |
