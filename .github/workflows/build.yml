@@ -1,12 +1,12 @@
 name: Build Whyred Kernel
 
 on:
-  workflow_dispatch: # Biar bisa diklik manual dari tab Actions
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04 # DIKUNCI DI 20.04 BIAR STABIL
-    timeout-minutes: 120  # Rem darurat 2 jam
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
 
     steps:
       - name: Checkout Source Code
@@ -15,23 +15,20 @@ jobs:
       - name: Build Kernel with SukiSU
         uses: dabao1955/kernel_build_action@main
         with:
-          # Ngambil source dari repo kamu
           kernel-url: https://github.com/Kenzilah/android_kernel_xiaomi_sdm660_44
           kernel-branch: android-4.4-stable
-          
-          # Konfigurasi Whyred
           config: whyred_defconfig
           arch: arm64
           android-version: 12
-          
-          # Toolchain
           aosp-clang: true
           aosp-gcc: true
-          
-          # Fitur Root (SukiSU/KSU)
           ksu: true
-          
-          # Output (Bikin file zip AnyKernel3 + Release)
           anykernel3: true
-          release: true
+          release: false # <--- KITA MATIIN FITUR RELEASE-NYA
           access-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Simpan File Zip ke Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kernel-RienaC1-meot
+          path: "**/*.zip" # Nyari file zip di mana pun letaknya
