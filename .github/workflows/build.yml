@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest # Pakai latest biar gampang dapet runner (nggak ngantre lama)
+    runs-on: runs-on: ubuntu-20.04 # Pakai latest biar gampang dapet runner (nggak ngantre lama)
     timeout-minutes: 120   # Kalau lebih dari 2 jam, matiin otomatis (biar gak nyangkut 5 jam lagi)
 
     steps:
