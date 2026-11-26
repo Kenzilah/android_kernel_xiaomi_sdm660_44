@@ -14,26 +14,22 @@ jobs:
 
       - name: Setup SukiSU (Manual Hook)
         run: |
-          # Ini nyuntik SukiSU Ultra langsung ke dalam source code
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev clang lld llvm make git
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev clang lld llvm make git gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Compile Kernel
         run: |
-          # Setup compiler
+          set -o pipefail # Biar kalau error, GitHub langsung kasih silang merah
           export ARCH=arm64
           export CC=clang
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
           
-          # Masuk ke konfigurasi
           make O=out ARCH=arm64 whyred_defconfig
-          
-          # Mulai Build (pakai 4 core)
           make -j4 O=out ARCH=arm64 2>&1 | tee build.log
 
       - name: Upload Kernel Image
