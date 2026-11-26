@@ -12,18 +12,28 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup SukiSU (Manual Hook)
+      - name: Setup SukiSU (Manual Hook + Patch static_call)
         run: |
+          # 1. Unduh dan suntik SukiSU
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
+          
+          # 2. HAPUS include static_call.h (karena kernel 4.4 tidak punya)
+          sed -i '/#include <linux\/static_call.h>/d' drivers/kernelsu/ksu_main.c
+          
+          # 3. Tambahkan definisi tiruan (dummy macro) agar SukiSU tidak error
+          # Taruh di paling atas file ksu_main.c
+          sed -i '1i #define static_call(name) name\n#define static_call_update(name, func) do { } while (0)' drivers/kernelsu/ksu_main.c
+          
+          echo "Patch static_call selesai!"
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev clang lld llvm make git gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev clang lld llvm make git gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi libc6-dev-arm64-cross libc6-dev-armhf-cross
 
       - name: Compile Kernel
         run: |
-          set -o pipefail # Biar kalau error, GitHub langsung kasih silang merah
+          set -o pipefail
           export ARCH=arm64
           export CC=clang
           export CROSS_COMPILE=aarch64-linux-gnu-
@@ -35,5 +45,5 @@ jobs:
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-Image-Whyred
+          name: Kernel-Image-Whyred-SukiSU
           path: out/arch/arm64/boot/Image.gz-dtb
