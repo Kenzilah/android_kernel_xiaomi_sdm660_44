@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04 # DIKUNCI DI 20.04 BIAR STABIL
+    runs-on: ubuntu-22.04 # DIKUNCI DI 20.04 BIAR STABIL
     timeout-minutes: 120  # Rem darurat 2 jam
 
     steps:
