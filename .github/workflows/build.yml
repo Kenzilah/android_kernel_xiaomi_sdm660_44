@@ -1,47 +1,38 @@
-name: Build Whyred Kernel + OC
+name: Build Whyred Kernel
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Biar bisa dijalanin manual dari tab Actions
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-20.04 # Pakai Ubuntu 20.04 biar toolchain lama lebih kompatibel
 
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # --- BAGIAN BUAT NAMBAHIN OC ---
-      - name: Patch Overclock (OC)
-        run: |
-          # Ini bakal ngubah tabel frekuensi CPU di source code lu
-          # (Ganti path di bawah ini sesuai file DTS/DTSI di repo lu)
-          
-          # 1. Bikin backup file aslinya
-          cp arch/arm64/boot/dts/qcom/sdm660-whyred.dtsi arch/arm64/boot/dts/qcom/sdm660-whyred.dtsi.bak
-          
-          # 2. Nambahin frekuensi CPU (Contoh: naikin batas atas ke 2.2GHz)
-          # (Pakai 'sed' buat nyari frekuensi lama dan ganti ke baru)
-          sed -i 's/opp-hz = \/bits\/ 64 <1804800000>;/opp-hz = \/bits\/ 64 <2208000000>;/g' arch/arm64/boot/dts/qcom/sdm660-whyred.dtsi
-          
-          # 3. Nambahin frekuensi GPU (Contoh: naikin ke 585MHz)
-          # (Catatan: path file GPU biasanya beda, ini cuma contoh)
-          # sed -i 's/opp-hz = \/bits\/ 64 <430000000>;/opp-hz = \/bits\/ 64 <585000000>;/g' arch/arm64/boot/dts/qcom/sdm660-gpu.dtsi
-          
-          echo "Patch OC selesai!"
-      # -------------------------------
-
-      - name: Build Kernel
-        uses: dabao1955/kernel_build_action@v1
+      - name: Build Kernel with SukiSU
+        uses: Kenzilah/kernel_build_action@main
         with:
+          # Ini otomatis ngambil source dari repo kamu sendiri
           kernel-url: https://github.com/Kenzilah/android_kernel_xiaomi_sdm660_44
           kernel-branch: android-4.4-stable
+          
+          # Nama file defconfig kamu
           config: whyred_defconfig
           arch: arm64
           android-version: 12
+          
+          # Toolchain (Karena 4.4, kita pakai Clang + GCC AOSP)
           aosp-clang: true
           aosp-gcc: true
+          
+          # Fitur SukiSU (Biasanya otomatis nge-patch KSU)
           ksu: true
+          
+          # Bikin file zip AnyKernel3 biar bisa langsung di-flash
           anykernel3: true
+          
+          # Simpan hasil build jadi Release biar gampang di-download
           release: true
           access-token: ${{ secrets.GITHUB_TOKEN }}
