@@ -1,38 +1,37 @@
 name: Build Whyred Kernel
 
 on:
-  workflow_dispatch: # Biar bisa dijalanin manual dari tab Actions
+  workflow_dispatch: # Biar bisa diklik manual dari tab Actions
 
 jobs:
   build:
-    runs-on: ubuntu-20.04 # Pakai Ubuntu 20.04 biar toolchain lama lebih kompatibel
+    runs-on: ubuntu-latest # Pakai latest biar gampang dapet runner (nggak ngantre lama)
+    timeout-minutes: 120   # Kalau lebih dari 2 jam, matiin otomatis (biar gak nyangkut 5 jam lagi)
 
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
       - name: Build Kernel with SukiSU
-        uses: Kenzilah/kernel_build_action@main
+        uses: dabao1955/kernel_build_action@v1
         with:
-          # Ini otomatis ngambil source dari repo kamu sendiri
+          # Ngambil source dari repo kamu sendiri
           kernel-url: https://github.com/Kenzilah/android_kernel_xiaomi_sdm660_44
           kernel-branch: android-4.4-stable
           
-          # Nama file defconfig kamu
+          # Konfigurasi Whyred
           config: whyred_defconfig
           arch: arm64
           android-version: 12
           
-          # Toolchain (Karena 4.4, kita pakai Clang + GCC AOSP)
+          # Toolchain
           aosp-clang: true
           aosp-gcc: true
           
-          # Fitur SukiSU (Biasanya otomatis nge-patch KSU)
+          # Fitur Root
           ksu: true
           
-          # Bikin file zip AnyKernel3 biar bisa langsung di-flash
+          # Output
           anykernel3: true
-          
-          # Simpan hasil build jadi Release biar gampang di-download
           release: true
           access-token: ${{ secrets.GITHUB_TOKEN }}
