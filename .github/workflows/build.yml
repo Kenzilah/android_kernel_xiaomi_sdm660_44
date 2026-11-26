@@ -12,19 +12,23 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup SukiSU (Manual Hook + Patch static_call)
+      - name: Setup SukiSU (Fix static_call & Disable SUSFS)
         run: |
           # 1. Unduh SukiSU
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
           
-          # 2. HAPUS semua include static_call.h di seluruh folder kernelsu
+          # 2. Patch static_call (yang udah berhasil kemarin)
           find drivers/kernelsu/ -type f -name "*.h" -o -name "*.c" | xargs sed -i '/#include <linux\/static_call.h>/d'
           find drivers/kernelsu/ -type f -name "*.h" -o -name "*.c" | xargs sed -i '/#include <linux\/static_call_types.h>/d'
-          
-          # 3. Tambahkan definisi tiruan (dummy macro) di file kernel_includes.h
           sed -i '1i #define static_call(name) name\n#define static_call_update(name, func) do { } while (0)\n#define static_call_mod(name) name' drivers/kernelsu/kernel_includes.h
           
-          echo "Patch static_call di kernel_includes.h selesai!"
+          # 3. HAPUS paksa include SUSFS biar gak error
+          find drivers/kernelsu/ -type f -name "*.h" -o -name "*.c" | xargs sed -i '/#include <linux\/susfs.h>/d'
+          
+          # 4. Matikan konfigurasi SUSFS di defconfig
+          echo "# CONFIG_KSU_SUSFS is not set" >> arch/arm64/configs/whyred_defconfig
+          
+          echo "Patch SukiSU selesai!"
 
       - name: Install Dependencies
         run: |
