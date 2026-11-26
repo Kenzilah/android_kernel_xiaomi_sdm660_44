@@ -13,7 +13,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Kernel with SukiSU
-        uses: dabao1955/kernel_build_action@v1
+        uses: dabao1955/kernel_build_action@main
         with:
           # Ngambil source dari repo kamu sendiri
           kernel-url: https://github.com/Kenzilah/android_kernel_xiaomi_sdm660_44
